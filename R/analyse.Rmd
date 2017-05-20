@@ -1,0 +1,149 @@
+---
+title: "analyse.R"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Load Libraries
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Libraries
+library(dplyr)
+library(reshape2)
+library(lubridate)
+library(ggplot2)
+library(caret)
+library(GGally)
+```
+
+
+## Define Functions
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+clean_data <- function(df){
+  #Replace NA values in coast_length with 0
+  if('coast_length' %in% names(df)){
+    df[is.na(df$coast_length),"coast_length"] <- 0
+  }
+  
+  return(df)
+}
+
+subset_total_damage_houses <- function(df){
+  # Remove names and proxy labels except for total_damage_houses
+  df <- df %>% subset(select = -c(typhoon_name, admin_L2_code, admin_L3_code, admin_L3_name, comp_damage_houses, part_damage_houses))
+  return(df)  
+}
+
+subset_part_damage_houses <- function(df){
+  # Remove names and proxy labels except for part_damage_houses
+  df <- df %>% subset(select = -c(typhoon_name, admin_L2_code, admin_L3_code, admin_L3_name, comp_damage_houses, total_damage_houses))
+  return(df)  
+}
+
+subset_comp_damage_houses <- function(df){
+  # Remove names and proxy labels except for comp_damage_houses
+  df <- df %>% subset(select = -c(typhoon_name, admin_L2_code, admin_L3_code, admin_L3_name, part_damage_houses, total_damage_houses))
+  return(df)  
+}
+```
+
+
+
+## Read Data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+file_labeled <- "/Users/dennis/Dropbox/datamission-hackathon/data/sample/hackathon-input/1. Modelling challenge/trainingset_sample.csv"
+file_unlabeled <- "/Users/dennis/Dropbox/datamission-hackathon/data/sample/hackathon-input/1. Modelling challenge/testset_sample.csv"
+df_labeled <- read.csv(file_labeled)
+df_unlabeled <- read.csv(file_unlabeled)
+```
+
+
+## Explore
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_labeled %>%
+  clean_data() %>%
+  head()
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_unlabeled %>%
+  clean_data() %>%
+  head()
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_labeled %>%
+  {ggplot(data = ., aes(x = total_damage_houses)) +
+      geom_histogram()
+  }
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_labeled %>%
+  {ggplot(data = ., aes(x = comp_damage_houses, y = part_damage_houses, color = n_households)) +
+    geom_point()
+  }
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#df_labeled %>%
+#  subset(select = c("total_damage_houses", "comp_damage_houses", "part_damage_houses", "pop_15", "average_speed_mph", "distance_typhoon_km")) %>%
+#  pairs()
+df_labeled %>%
+  subset(select = c("total_damage_houses", "comp_damage_houses", "part_damage_houses", "pop_15", "average_speed_mph", "distance_typhoon_km")) %>%
+  ggpairs()
+```
+
+
+## PREPROCESS
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_labeled_clean_subset <- df_labeled %>%
+  clean_data() %>%
+  subset_total_damage_houses()
+
+df_unlabeled_clean_subset <- df_unlabeled %>%
+  clean_data() %>%
+  subset_total_damage_houses()
+```
+
+
+
+## MACHINE LEARNING
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Divide into training, testing and predicting set
+set.seed(1234)
+m_train <- createDataPartition(df_labeled$total_damage_houses, p=.6, list = FALSE)
+df_train <- df_labeled[m_train,]
+df_test <- df_labeled[-m_train,]
+df_predict <- df_unlabeled_clean_subset
+
+# Train
+model_rpart <- train(total_damage_houses ~ ., data=df_train, method="rpart")
+#model_gbm <- train(total_damage_houses ~ ., data=df_train, method="gbm")
+#model_rf <- train(total_damage_houses ~ ., data=df_train, method="rf", trControl=trainControl(method="cv", number=10))
+
+# Model details
+model_best <- model_rpart
+model_best$finalModel
+
+# Predict
+test_predictions <- predict(model_best, newdata=df.testing)
+
+# Most important variables
+varImp(model_best)
+
+# Save/load model to/from file
+saveRDS(model_best, "model_rf.rds")
+# model <- readRDS("model_rf.rds")
+```
